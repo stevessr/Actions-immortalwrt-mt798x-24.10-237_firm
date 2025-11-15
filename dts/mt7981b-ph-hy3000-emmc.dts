@@ -16,7 +16,7 @@
 		led-boot = &status_red_led;
 		led-failsafe = &status_red_led;
 		led-running = &status_green_led;
-		led-upgrade = &status_blue_led;
+		led-upgrade = &status_red_led;
 	};
 
 	chosen {
