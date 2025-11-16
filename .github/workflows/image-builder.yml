@@ -150,14 +150,10 @@ jobs:
       - name: Install feeds
         run: cd openwrt && ./scripts/feeds install -a
 
-      - name: Custom Packages
-        run: |
+      - name: Custom Packages 
+        run: | 
           cd ./openwrt/package/
-
-          #$GITHUB_WORKSPACE/Packages.sh
           bash "$GITHUB_WORKSPACE/Packages.sh"
-          #chmod +x ./Packages.sh
-         
 
       - name: Load custom configuration
         run: |
