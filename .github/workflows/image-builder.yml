@@ -125,15 +125,6 @@ jobs:
           sudo timedatectl set-timezone "$TZ"
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
-          
-      - name: Setup ccache
-        run: |
-          echo "CONFIG_CCACHE=y" >> $GITHUB_ENV
-          echo "USE_CCACHE=1" >> $GITHUB_ENV
-          mkdir -p ~/.ccache
-          echo "max_size = 5.0G" > ~/.ccache/ccache.conf
-          echo "compression = true" >> ~/.ccache/ccache.conf
-          echo "compression_level = 6" >> ~/.ccache/ccache.conf
 
       - name: Clone source code
         working-directory: /workdir
@@ -145,6 +136,15 @@ jobs:
       - name: Get repo hash
         id: get-hash
         run: echo "repo_hash=$(git -C openwrt rev-parse HEAD)" >> $GITHUB_OUTPUT
+          
+      - name: Setup ccache
+        run: |
+          echo "CONFIG_CCACHE=y" >> $GITHUB_ENV
+          echo "USE_CCACHE=1" >> $GITHUB_ENV
+          mkdir -p ~/.ccache
+          echo "max_size = 5.0G" > ~/.ccache/ccache.conf
+          echo "compression = true" >> ~/.ccache/ccache.conf
+          echo "compression_level = 6" >> ~/.ccache/ccache.conf
 
       - name: Cache ccache
         uses: actions/cache@v4
@@ -181,11 +181,20 @@ jobs:
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
 
+      - name: Generate config hash for cache key
+        id: config-hash
+        run: |
+          if [ -f openwrt/.config ]; then
+            echo "hash=$(md5sum openwrt/.config | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          else
+            echo "hash=default" >> $GITHUB_OUTPUT
+          fi
+
       - name: Cache downloads
         uses: actions/cache@v4
         with:
           path: openwrt/dl
-          key: downloads-${{ env.CONFIG_FILE }}-${{ hashFiles('openwrt/.config') }}
+          key: downloads-${{ env.CONFIG_FILE }}-${{ steps.config-hash.outputs.hash }}
           restore-keys: |
             downloads-${{ env.CONFIG_FILE }}-
             downloads-
