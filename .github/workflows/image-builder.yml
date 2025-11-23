@@ -129,7 +129,7 @@ jobs:
       - name: Setup ccache
         run: |
           echo "CONFIG_CCACHE=y" >> $GITHUB_ENV
-          echo "export USE_CCACHE=1" >> ~/.bashrc
+          echo "USE_CCACHE=1" >> $GITHUB_ENV
           mkdir -p ~/.ccache
           echo "max_size = 5.0G" > ~/.ccache/ccache.conf
           echo "compression = true" >> ~/.ccache/ccache.conf
@@ -206,7 +206,6 @@ jobs:
           cd openwrt
           echo -e "$(nproc) thread compile"
           export PATH="/usr/lib/ccache:$PATH"
-          export CONFIG_CCACHE=y
           echo "ccache status before build:"
           ccache -s
           make -j$(nproc) || make -j1 || make -j1 V=s
