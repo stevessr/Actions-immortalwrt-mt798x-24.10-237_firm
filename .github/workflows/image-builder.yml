@@ -125,6 +125,15 @@ jobs:
           sudo timedatectl set-timezone "$TZ"
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
+          
+      - name: Setup ccache
+        run: |
+          echo "CONFIG_CCACHE=y" >> $GITHUB_ENV
+          echo "export USE_CCACHE=1" >> ~/.bashrc
+          mkdir -p ~/.ccache
+          echo "max_size = 5.0G" > ~/.ccache/ccache.conf
+          echo "compression = true" >> ~/.ccache/ccache.conf
+          echo "compression_level = 6" >> ~/.ccache/ccache.conf
 
       - name: Clone source code
         working-directory: /workdir
@@ -137,12 +146,44 @@ jobs:
         id: get-hash
         run: echo "repo_hash=$(git -C openwrt rev-parse HEAD)" >> $GITHUB_OUTPUT
 
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ env.CONFIG_FILE }}-${{ steps.get-hash.outputs.repo_hash }}
+          restore-keys: |
+            ccache-${{ env.CONFIG_FILE }}-
+            ccache-
+
+      - name: Cache toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            openwrt/staging_dir/toolchain-*
+            openwrt/staging_dir/host
+            openwrt/build_dir/host
+            openwrt/build_dir/toolchain-*
+          key: toolchain-${{ env.CONFIG_FILE }}-${{ steps.get-hash.outputs.repo_hash }}
+          restore-keys: |
+            toolchain-${{ env.CONFIG_FILE }}-
+            toolchain-
+
       - name: Load custom feeds
         run: |
           [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
           chmod +x $DIY_P1_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P1_SH
+
+      - name: Cache feeds
+        uses: actions/cache@v4
+        with:
+          path: |
+            openwrt/feeds
+          key: feeds-${{ env.CONFIG_FILE }}-${{ steps.get-hash.outputs.repo_hash }}
+          restore-keys: |
+            feeds-${{ env.CONFIG_FILE }}-
+            feeds-
 
       - name: Update feeds
         run: cd openwrt && ./scripts/feeds update -a
@@ -163,6 +204,15 @@ jobs:
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
 
+      - name: Cache downloads
+        uses: actions/cache@v4
+        with:
+          path: openwrt/dl
+          key: downloads-${{ env.CONFIG_FILE }}-${{ hashFiles('openwrt/.config') }}
+          restore-keys: |
+            downloads-${{ env.CONFIG_FILE }}-
+            downloads-
+
       - name: Download package
         id: package
         run: |
@@ -178,7 +228,13 @@ jobs:
         run: |
           cd openwrt
           echo -e "$(nproc) thread compile"
+          export PATH="/usr/lib/ccache:$PATH"
+          export CONFIG_CCACHE=y
+          echo "ccache status before build:"
+          ccache -s
           make -j$(nproc) || make -j1 || make -j1 V=s
+          echo "ccache status after build:"
+          ccache -s
           #make -j1 || make -j1 V=s
           grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
           [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV || echo "DEVICE_NAME=unknown" >> $GITHUB_ENV
