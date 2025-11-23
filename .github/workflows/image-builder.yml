@@ -155,35 +155,12 @@ jobs:
             ccache-${{ env.CONFIG_FILE }}-
             ccache-
 
-      - name: Cache toolchain
-        uses: actions/cache@v4
-        with:
-          path: |
-            openwrt/staging_dir/toolchain-*
-            openwrt/staging_dir/host
-            openwrt/build_dir/host
-            openwrt/build_dir/toolchain-*
-          key: toolchain-${{ env.CONFIG_FILE }}-${{ steps.get-hash.outputs.repo_hash }}
-          restore-keys: |
-            toolchain-${{ env.CONFIG_FILE }}-
-            toolchain-
-
       - name: Load custom feeds
         run: |
           [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
           chmod +x $DIY_P1_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P1_SH
-
-      - name: Cache feeds
-        uses: actions/cache@v4
-        with:
-          path: |
-            openwrt/feeds
-          key: feeds-${{ env.CONFIG_FILE }}-${{ steps.get-hash.outputs.repo_hash }}
-          restore-keys: |
-            feeds-${{ env.CONFIG_FILE }}-
-            feeds-
 
       - name: Update feeds
         run: cd openwrt && ./scripts/feeds update -a
