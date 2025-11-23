@@ -140,7 +140,6 @@ jobs:
       - name: Setup ccache
         run: |
           echo "USE_CCACHE=1" >> $GITHUB_ENV
-          export PATH="/usr/lib/ccache:$PATH"
           echo "/usr/lib/ccache" >> $GITHUB_PATH
           mkdir -p ~/.ccache
           echo "max_size = 5.0G" > ~/.ccache/ccache.conf
@@ -216,10 +215,10 @@ jobs:
           cd openwrt
           echo -e "$(nproc) thread compile"
           echo "ccache status before build:"
-          ccache -s
+          ccache -s || echo "ccache not available"
           make -j$(nproc) || make -j1 || make -j1 V=s
           echo "ccache status after build:"
-          ccache -s
+          ccache -s || echo "ccache not available"
           #make -j1 || make -j1 V=s
           grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
           [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV || echo "DEVICE_NAME=unknown" >> $GITHUB_ENV
