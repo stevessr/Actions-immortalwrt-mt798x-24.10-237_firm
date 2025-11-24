@@ -155,14 +155,11 @@ jobs:
           echo "compression = true" >> ~/.ccache/ccache.conf
           echo "compression_level = 6" >> ~/.ccache/ccache.conf
 
-      - name: Cache ccache
-        uses: actions/cache@v4
+      - name: Cache WRT toolchain
+        uses: RuijieNetworksCommunity/cache-wrt-toolchain@main
         with:
-          path: ~/.ccache
-          key: ccache-${{ env.CONFIG_FILE }}-${{ steps.get-hash.outputs.repo_hash }}
-          restore-keys: |
-            ccache-${{ env.CONFIG_FILE }}-
-            ccache-
+          ccache_key: ccache-${{ env.CONFIG_FILE }}-${{ steps.get-hash.outputs.repo_hash }}
+          toolchain_key: toolchain-${{ env.CONFIG_FILE }}-${{ steps.get-hash.outputs.repo_hash }}
 
       - name: Load custom feeds
         run: |
@@ -298,14 +295,11 @@ jobs:
           echo "compression = true" >> ~/.ccache/ccache.conf
           echo "compression_level = 6" >> ~/.ccache/ccache.conf
 
-      - name: Cache ccache
-        uses: actions/cache@v4
+      - name: Cache WRT toolchain
+        uses: RuijieNetworksCommunity/cache-wrt-toolchain@main
         with:
-          path: ~/.ccache
-          key: ccache-toolchain-${{ env.CONFIG_FILE }}-${{ needs.prepare.outputs.repo_hash }}
-          restore-keys: |
-            ccache-toolchain-${{ env.CONFIG_FILE }}-
-            ccache-toolchain-
+          ccache_key: ccache-toolchain-${{ env.CONFIG_FILE }}-${{ needs.prepare.outputs.repo_hash }}
+          toolchain_key: toolchain-toolchain-${{ env.CONFIG_FILE }}-${{ needs.prepare.outputs.repo_hash }}
 
       - name: Download workspace
         uses: actions/download-artifact@main
@@ -396,14 +390,11 @@ jobs:
           echo "compression = true" >> ~/.ccache/ccache.conf
           echo "compression_level = 6" >> ~/.ccache/ccache.conf
 
-      - name: Cache ccache
-        uses: actions/cache@v4
+      - name: Cache WRT toolchain
+        uses: RuijieNetworksCommunity/cache-wrt-toolchain@main
         with:
-          path: ~/.ccache
-          key: ccache-packages-${{ matrix.package_group }}-${{ env.CONFIG_FILE }}-${{ needs.prepare.outputs.repo_hash }}
-          restore-keys: |
-            ccache-packages-${{ matrix.package_group }}-${{ env.CONFIG_FILE }}-
-            ccache-packages-${{ matrix.package_group }}-
+          ccache_key: ccache-packages-${{ matrix.package_group }}-${{ env.CONFIG_FILE }}-${{ needs.prepare.outputs.repo_hash }}
+          toolchain_key: toolchain-packages-${{ matrix.package_group }}-${{ env.CONFIG_FILE }}-${{ needs.prepare.outputs.repo_hash }}
 
       - name: Download workspace
         uses: actions/download-artifact@main
