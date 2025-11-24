@@ -127,6 +127,12 @@ jobs:
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
 
+      - name: Install aria2 for faster downloads
+        run: |
+          sudo -E apt-get -qq update
+          sudo -E apt-get -qq install aria2
+          aria2c --version
+
       - name: Clone source code
         working-directory: /workdir
         run: |
@@ -204,8 +210,20 @@ jobs:
         id: package
         run: |
           cd openwrt
+          
+          # Configure aria2c for faster downloads
+          cat >> .config << EOF
+          CONFIG_DOWNLOAD_TOOL_CUSTOM="aria2c"
+          CONFIG_ARIA2C_OPTS="-x 16 -s 16 -k 1M -j 16 --max-overall-download-limit=0"
+          EOF
+          
           make defconfig
-          make download -j8
+          
+          # Use maximum parallelism for downloads
+          echo "Starting parallel downloads with $(nproc) jobs..."
+          make download -j$(nproc) V=s || make download -j$(nproc) || make download -j1 V=s
+          
+          # Clean up failed downloads
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
 
