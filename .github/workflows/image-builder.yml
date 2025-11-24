@@ -59,7 +59,7 @@ on:
         default: Asia/Shanghai
     outputs:
       repo_hash:
-        value: ${{ jobs.build.outputs.repo_hash }}
+        value: ${{ jobs.prepare.outputs.repo_hash }}
 
 env:
   REPO_URL: ${{ inputs.repo_url }}
@@ -75,10 +75,11 @@ env:
   TZ: ${{ inputs.tz }}
 
 jobs:
-  build:
+  prepare:
     runs-on: ubuntu-22.04
     outputs:
       repo_hash: ${{ steps.get-hash.outputs.repo_hash }}
+      config_hash: ${{ steps.config-hash.outputs.hash }}
 
     steps:
       - name: Checkout
@@ -208,21 +209,334 @@ jobs:
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
 
+      - name: Create build workspace archive
+        run: |
+          cd /workdir
+          tar -czf openwrt-workspace.tar.gz openwrt/
+          
+      - name: Upload workspace
+        uses: actions/upload-artifact@main
+        with:
+          name: openwrt-workspace-${{ steps.get-hash.outputs.repo_hash }}
+          path: /workdir/openwrt-workspace.tar.gz
+          retention-days: 1
 
-      - name: Compile the firmware
-        id: compile
+  build-toolchain:
+    runs-on: ubuntu-22.04
+    needs: prepare
+    outputs:
+      build_status: ${{ steps.compile-toolchain.outcome }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+
+      - name: 释放Ubuntu磁盘空间
+        uses: danshui-git/free-disk-space@main
+        continue-on-error: true
+        timeout-minutes: 15
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+          remove_swap: true
+          remove_docker_image: true
+          remove_packages: "[google-cloud-cli temurin-* azure-cli microsoft-edge-stable google-chrome-stable firefox postgresql* *llvm* mysql* dotnet-sdk-*]"
+          remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/share/glade* /usr/local/share/chromium /usr/local/share/powershell"
+
+      - name: Initialization environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo -E apt-get -qq update
+          sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib g++-multilib git gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev libncurses5-dev zstd
+          sudo -E apt-get -qq autoremove --purge
+          sudo -E apt-get -qq clean
+          sudo timedatectl set-timezone "$TZ"
+          sudo mkdir -p /workdir
+          sudo chown $USER:$GROUPS /workdir
+
+      - name: Setup ccache
+        run: |
+          echo "USE_CCACHE=1" >> $GITHUB_ENV
+          echo "/usr/lib/ccache" >> $GITHUB_PATH
+          mkdir -p ~/.ccache
+          echo "max_size = 5.0G" > ~/.ccache/ccache.conf
+          echo "compression = true" >> ~/.ccache/ccache.conf
+          echo "compression_level = 6" >> ~/.ccache/ccache.conf
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-toolchain-${{ env.CONFIG_FILE }}-${{ needs.prepare.outputs.repo_hash }}
+          restore-keys: |
+            ccache-toolchain-${{ env.CONFIG_FILE }}-
+            ccache-toolchain-
+
+      - name: Download workspace
+        uses: actions/download-artifact@main
+        with:
+          name: openwrt-workspace-${{ needs.prepare.outputs.repo_hash }}
+          path: /workdir
+
+      - name: Extract workspace
+        working-directory: /workdir
+        run: |
+          tar -xzf openwrt-workspace.tar.gz
+          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+      - name: Compile toolchain and system
+        id: compile-toolchain
         run: |
           cd openwrt
-          echo -e "$(nproc) thread compile"
+          echo -e "$(nproc) thread compile - Building toolchain and system"
           echo "ccache status before build:"
           ccache -s || echo "ccache not available"
-          make -j$(nproc) || make -j1 || make -j1 V=s
+          make -j$(nproc) tools/compile || make -j1 tools/compile V=s
+          make -j$(nproc) toolchain/compile || make -j1 toolchain/compile V=s
+          make -j$(nproc) target/compile || make -j1 target/compile V=s
           echo "ccache status after build:"
           ccache -s || echo "ccache not available"
-          #make -j1 || make -j1 V=s
+
+      - name: Create toolchain archive
+        run: |
+          cd /workdir/openwrt
+          tar -czf toolchain-build.tar.gz staging_dir/ build_dir/
+
+      - name: Upload toolchain build
+        uses: actions/upload-artifact@main
+        with:
+          name: toolchain-build-${{ needs.prepare.outputs.repo_hash }}
+          path: /workdir/openwrt/toolchain-build.tar.gz
+          retention-days: 1
+
+  build-packages:
+    runs-on: ubuntu-22.04
+    needs: [prepare, build-toolchain]
+    strategy:
+      fail-fast: false
+      matrix:
+        package_group: [1, 2, 3]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+
+      - name: 释放Ubuntu磁盘空间
+        uses: danshui-git/free-disk-space@main
+        continue-on-error: true
+        timeout-minutes: 15
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+          remove_swap: true
+          remove_docker_image: true
+          remove_packages: "[google-cloud-cli temurin-* azure-cli microsoft-edge-stable google-chrome-stable firefox postgresql* *llvm* mysql* dotnet-sdk-*]"
+          remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/share/glade* /usr/local/share/chromium /usr/local/share/powershell"
+
+      - name: Initialization environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo -E apt-get -qq update
+          sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib g++-multilib git gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev libncurses5-dev zstd
+          sudo -E apt-get -qq autoremove --purge
+          sudo -E apt-get -qq clean
+          sudo timedatectl set-timezone "$TZ"
+          sudo mkdir -p /workdir
+          sudo chown $USER:$GROUPS /workdir
+
+      - name: Setup ccache
+        run: |
+          echo "USE_CCACHE=1" >> $GITHUB_ENV
+          echo "/usr/lib/ccache" >> $GITHUB_PATH
+          mkdir -p ~/.ccache
+          echo "max_size = 3.0G" > ~/.ccache/ccache.conf
+          echo "compression = true" >> ~/.ccache/ccache.conf
+          echo "compression_level = 6" >> ~/.ccache/ccache.conf
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-packages-${{ matrix.package_group }}-${{ env.CONFIG_FILE }}-${{ needs.prepare.outputs.repo_hash }}
+          restore-keys: |
+            ccache-packages-${{ matrix.package_group }}-${{ env.CONFIG_FILE }}-
+            ccache-packages-${{ matrix.package_group }}-
+
+      - name: Download workspace
+        uses: actions/download-artifact@main
+        with:
+          name: openwrt-workspace-${{ needs.prepare.outputs.repo_hash }}
+          path: /workdir
+
+      - name: Extract workspace
+        working-directory: /workdir
+        run: |
+          tar -xzf openwrt-workspace.tar.gz
+          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+      - name: Download toolchain build
+        uses: actions/download-artifact@main
+        with:
+          name: toolchain-build-${{ needs.prepare.outputs.repo_hash }}
+          path: /workdir/openwrt
+
+      - name: Extract toolchain
+        working-directory: /workdir/openwrt
+        run: |
+          tar -xzf toolchain-build.tar.gz
+          rm toolchain-build.tar.gz
+
+      - name: Compile packages (group ${{ matrix.package_group }})
+        id: compile-packages
+        run: |
+          cd openwrt
+          echo -e "$(nproc) thread compile - Building packages group ${{ matrix.package_group }}"
+          echo "ccache status before build:"
+          ccache -s || echo "ccache not available"
+          
+          # Split packages into groups for parallel compilation
+          TOTAL_GROUPS=3
+          GROUP_NUM=${{ matrix.package_group }}
+          
+          # Get list of all packages
+          PACKAGES=$(make package/index V=s 2>&1 | grep "^package/" | cut -d'/' -f2 | sort -u)
+          TOTAL_PACKAGES=$(echo "$PACKAGES" | wc -l)
+          PACKAGES_PER_GROUP=$(( ($TOTAL_PACKAGES + $TOTAL_GROUPS - 1) / $TOTAL_GROUPS ))
+          
+          # Calculate start and end for this group
+          START=$(( ($GROUP_NUM - 1) * $PACKAGES_PER_GROUP + 1 ))
+          END=$(( $GROUP_NUM * $PACKAGES_PER_GROUP ))
+          
+          # Get packages for this group
+          GROUP_PACKAGES=$(echo "$PACKAGES" | sed -n "${START},${END}p")
+          
+          echo "Building packages from $START to $END (group $GROUP_NUM of $TOTAL_GROUPS)"
+          
+          # Compile packages in this group
+          for pkg in $GROUP_PACKAGES; do
+            echo "Compiling package: $pkg"
+            make -j$(nproc) package/$pkg/compile || make -j1 package/$pkg/compile V=s || true
+          done
+          
+          echo "ccache status after build:"
+          ccache -s || echo "ccache not available"
+
+      - name: Create packages archive
+        run: |
+          cd /workdir/openwrt
+          mkdir -p bin/packages-group-${{ matrix.package_group }}
+          [ -d bin/packages ] && cp -r bin/packages/* bin/packages-group-${{ matrix.package_group }}/ || true
+          [ -d bin/targets ] && cp -r bin/targets bin/packages-group-${{ matrix.package_group }}/ || true
+          tar -czf packages-group-${{ matrix.package_group }}.tar.gz bin/packages-group-${{ matrix.package_group }}/
+
+      - name: Upload packages build
+        uses: actions/upload-artifact@main
+        with:
+          name: packages-build-${{ matrix.package_group }}-${{ needs.prepare.outputs.repo_hash }}
+          path: /workdir/openwrt/packages-group-${{ matrix.package_group }}.tar.gz
+          retention-days: 1
+
+  finalize:
+    runs-on: ubuntu-22.04
+    needs: [prepare, build-toolchain, build-packages]
+    outputs:
+      device_name: ${{ steps.set-device.outputs.device_name }}
+      file_date: ${{ steps.set-device.outputs.file_date }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+
+      - name: Initialization environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo -E apt-get -qq update
+          sudo -E apt-get -qq install rsync
+          sudo mkdir -p /workdir
+          sudo chown $USER:$GROUPS /workdir
+
+      - name: Download workspace
+        uses: actions/download-artifact@main
+        with:
+          name: openwrt-workspace-${{ needs.prepare.outputs.repo_hash }}
+          path: /workdir
+
+      - name: Extract workspace
+        working-directory: /workdir
+        run: |
+          tar -xzf openwrt-workspace.tar.gz
+          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+      - name: Download toolchain build
+        uses: actions/download-artifact@main
+        with:
+          name: toolchain-build-${{ needs.prepare.outputs.repo_hash }}
+          path: /workdir/openwrt
+
+      - name: Extract toolchain
+        working-directory: /workdir/openwrt
+        run: |
+          tar -xzf toolchain-build.tar.gz
+          rm toolchain-build.tar.gz
+
+      - name: Download all package builds
+        uses: actions/download-artifact@main
+        with:
+          pattern: packages-build-*-${{ needs.prepare.outputs.repo_hash }}
+          path: /workdir/packages-temp
+          merge-multiple: true
+
+      - name: Merge package builds
+        run: |
+          cd /workdir/packages-temp
+          mkdir -p /workdir/openwrt/bin
+          for archive in packages-group-*.tar.gz; do
+            echo "Extracting $archive"
+            tar -xzf "$archive" -C /workdir/openwrt/bin/ || true
+          done
+          # Merge all package groups
+          if [ -d /workdir/openwrt/bin/packages-group-1 ]; then
+            rsync -a /workdir/openwrt/bin/packages-group-*/ /workdir/openwrt/bin/ || true
+          fi
+
+      - name: Generate package index and final image
+        id: finalize
+        run: |
+          cd openwrt
+          echo "Generating package index..."
+          make package/index V=s || true
+          echo "Building final image..."
+          make -j$(nproc) target/install || make -j1 target/install V=s
+          make -j$(nproc) checksum || true
+
+      - name: Generate package index and final image
+        id: finalize
+        run: |
+          cd openwrt
+          echo "Generating package index..."
+          make package/index V=s || true
+          echo "Building final image..."
+          make -j$(nproc) target/install || make -j1 target/install V=s
+          make -j$(nproc) checksum || true
+
+      - name: Set device info
+        id: set-device
+        run: |
+          cd openwrt
           grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-          [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV || echo "DEVICE_NAME=unknown" >> $GITHUB_ENV
-          echo "FILE_DATE=$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+          [ -s DEVICE_NAME ] && echo "device_name=$(cat DEVICE_NAME)" >> $GITHUB_OUTPUT || echo "device_name=unknown" >> $GITHUB_OUTPUT
+          echo "file_date=$(date +"%Y%m%d%H%M")" >> $GITHUB_OUTPUT
 
       - name: Check space usage
         if: (!cancelled())
@@ -230,14 +544,14 @@ jobs:
 
       - name: Upload bin directory
         uses: actions/upload-artifact@main
-        if: steps.compile.conclusion == 'success' && env.UPLOAD_BIN_DIR == 'true' && !cancelled()
+        if: env.UPLOAD_BIN_DIR == 'true' && !cancelled()
         with:
-          name: OpenWrt_bin_${{ env.DEVICE_NAME }}_${{ env.FILE_DATE }}
+          name: OpenWrt_bin_${{ steps.set-device.outputs.device_name }}_${{ steps.set-device.outputs.file_date }}
           path: openwrt/bin
 
       - name: Organize files
         id: organize
-        if: steps.compile.conclusion == 'success' && env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+        if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
         run: |
           cd openwrt/bin/targets/*/*
           rm -rf packages
@@ -247,19 +561,19 @@ jobs:
         uses: actions/upload-artifact@main
         if: steps.organize.conclusion == 'success' && !cancelled()
         with:
-          name: OpenWrt_firmware_${{ env.DEVICE_NAME }}_${{ env.FILE_DATE }}
+          name: OpenWrt_firmware_${{ steps.set-device.outputs.device_name }}_${{ steps.set-device.outputs.file_date }}
           path: ${{ env.FIRMWARE }}
 
       - name: Generate release tag
         id: tag
-        if: steps.compile.conclusion == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         run: |
           echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           touch "${RELEASE_FILE}"
           BADGE=$(mktemp)
           cat > "$BADGE" << EOF
           [![Build Time](https://img.shields.io/badge/build-$(date +"%Y--%m--%d_%H:%M")-brightgreen?logo=github)](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) \
-          ![Device](https://img.shields.io/badge/device-$(echo ${{ env.DEVICE_NAME }} | sed 's/-/--/g')-blue) \
+          ![Device](https://img.shields.io/badge/device-$(echo ${{ steps.set-device.outputs.device_name }} | sed 's/-/--/g')-blue) \
           [![Source Repo](https://img.shields.io/badge/source-repo-orange?logo=github)](${REPO_URL}/tree/${REPO_BRANCH}) \
           [![Commit](https://img.shields.io/badge/commit-$(git -C openwrt rev-parse --short HEAD)-yellow?logo=github)](${REPO_URL}/commit/$(git -C openwrt rev-parse HEAD))
           EOF
@@ -278,6 +592,6 @@ jobs:
   cleanup:
     if: success()
     uses: ./.github/workflows/clean-up.yml
-    needs: build
+    needs: finalize
     with:
       clean-release: true
