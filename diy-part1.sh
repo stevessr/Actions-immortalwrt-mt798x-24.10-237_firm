@@ -30,8 +30,7 @@ COMPILE_DATE=$(date +"%Y年%m月%d日")
 #sed -i "s/%R/   编译日期： ${COMPILE_DATE}  by 微信:Mr___zjz/g" package/base-files/files/usr/lib/os-release  
 #sed -i "s/%R/   编译日期： ${COMPILE_DATE}  by 微信:Mr___zjz/g" package/base-files/files/etc/openwrt_release
 
-sed -i 's|git.netfilter.org/ebtables|github.com/immortalwrt/ebtables|' package/network/utils/ebtables/Makefile
-
+sed -i 's|git.netfilter.org/ebtables|github.com/stevessr/ebtables|' package/network/utils/ebtables/Makefile
 
 
 
