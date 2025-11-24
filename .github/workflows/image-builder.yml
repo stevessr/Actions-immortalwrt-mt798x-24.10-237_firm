@@ -224,6 +224,9 @@ jobs:
   build-toolchain:
     runs-on: ubuntu-22.04
     needs: prepare
+    permissions:
+      contents: read
+      actions: read
     outputs:
       build_status: ${{ steps.compile-toolchain.outcome }}
 
@@ -317,6 +320,9 @@ jobs:
   build-packages:
     runs-on: ubuntu-22.04
     needs: [prepare, build-toolchain]
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -469,6 +475,9 @@ jobs:
   finalize:
     runs-on: ubuntu-22.04
     needs: [prepare, build-toolchain, build-packages]
+    permissions:
+      contents: write
+      actions: read
     outputs:
       device_name: ${{ steps.set-device.outputs.device_name }}
       file_date: ${{ steps.set-device.outputs.file_date }}
