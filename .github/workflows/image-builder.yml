@@ -513,21 +513,7 @@ jobs:
           path: /workdir/openwrt/packages-group-${{ matrix.package_group }}.tar.gz
           retention-days: 1
 
-  finalize:
-    runs-on: ubuntu-22.04
-    needs: [prepare, build-toolchain, build-packages]
-    permissions:
-      contents: write
-      actions: read
-    outputs:
-      device_name: ${{ steps.set-device.outputs.device_name }}
-      file_date: ${{ steps.set-device.outputs.file_date }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@main
-
-      - name: Initialization environment
+      - name: Initialization environment for finalization
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -535,31 +521,6 @@ jobs:
           sudo -E apt-get -qq install rsync
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
-
-      - name: Download workspace
-        uses: actions/download-artifact@main
-        with:
-          name: openwrt-workspace-${{ needs.prepare.outputs.repo_hash }}
-          path: /workdir
-
-      - name: Extract workspace
-        working-directory: /workdir
-        run: |
-          tar -xzf openwrt-workspace.tar.gz
-          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-
-      - name: Download toolchain build
-        uses: actions/download-artifact@main
-        with:
-          name: toolchain-build-${{ needs.prepare.outputs.repo_hash }}
-          path: /workdir/openwrt
-
-      - name: Extract toolchain
-        working-directory: /workdir/openwrt
-        run: |
-          tar -xzf toolchain-build.tar.gz
-          rm toolchain-build.tar.gz
-          echo "Toolchain extracted successfully"
 
       - name: Download all package builds
         uses: actions/download-artifact@main
@@ -604,7 +565,7 @@ jobs:
           cd openwrt
           grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
           [ -s DEVICE_NAME ] && echo "device_name=$(cat DEVICE_NAME)" >> $GITHUB_OUTPUT || echo "device_name=unknown" >> $GITHUB_OUTPUT
-          echo "file_date=$(date +"%Y%m%d%H%M")" >> $GITHUB_OUTPUT
+          echo "file_date=$(date +\"%Y%m%d%H%M\")" >> $GITHUB_OUTPUT
 
       - name: Check space usage
         if: (!cancelled())
@@ -636,16 +597,16 @@ jobs:
         id: tag
         if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         run: |
-          echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+          echo "release_tag=$(date +\"%Y.%m.%d-%H%M\")" >> $GITHUB_OUTPUT
           touch "${RELEASE_FILE}"
           BADGE=$(mktemp)
           cat > "$BADGE" << EOF
-          [![Build Time](https://img.shields.io/badge/build-$(date +"%Y--%m--%d_%H:%M")-brightgreen?logo=github)](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) \
+          [![Build Time](https://img.shields.io/badge/build-$(date +\"%Y--%m--%d_%H:%M\")-brightgreen?logo=github)](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) \
           ![Device](https://img.shields.io/badge/device-$(echo ${{ steps.set-device.outputs.device_name }} | sed 's/-/--/g')-blue) \
           [![Source Repo](https://img.shields.io/badge/source-repo-orange?logo=github)](${REPO_URL}/tree/${REPO_BRANCH}) \
           [![Commit](https://img.shields.io/badge/commit-$(git -C openwrt rev-parse --short HEAD)-yellow?logo=github)](${REPO_URL}/commit/$(git -C openwrt rev-parse HEAD))
           EOF
-          grep -q "!\[Badge\]" "${RELEASE_FILE}" && sed -i "/!\[Badge\]/r ${BADGE}" "${RELEASE_FILE}" && sed -i "/!\[Badge\]/d" "${RELEASE_FILE}" || sed -i "1r ${BADGE}" "${RELEASE_FILE}"
+          grep -q "!\\[Badge\\]" "${RELEASE_FILE}" && sed -i "/!\\[Badge\\]/r ${BADGE}" "${RELEASE_FILE}" && sed -i "/!\\[Badge\\]/d" "${RELEASE_FILE}" || sed -i "1r ${BADGE}" "${RELEASE_FILE}"
 
       - name: Upload firmware to release
         uses: softprops/action-gh-release@v2
@@ -660,6 +621,7 @@ jobs:
   cleanup:
     if: success()
     uses: ./.github/workflows/clean-up.yml
-    needs: finalize
+    needs: [prepare, build-toolchain, build-packages]
     with:
       clean-release: true
+
