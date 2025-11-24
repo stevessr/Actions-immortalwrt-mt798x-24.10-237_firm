@@ -129,9 +129,11 @@ jobs:
 
       - name: Install aria2 for faster downloads
         run: |
+          set -e
           sudo -E apt-get -qq update
           sudo -E apt-get -qq install aria2
           aria2c --version
+          echo "aria2c installed successfully"
 
       - name: Clone source code
         working-directory: /workdir
@@ -208,20 +210,27 @@ jobs:
 
       - name: Download package
         id: package
+        env:
+          ARIA2C_CONNECTIONS: 16
+          ARIA2C_SEGMENTS: 16
+          ARIA2C_MIN_SPLIT_SIZE: 1M
+          ARIA2C_MAX_CONCURRENT: 16
         run: |
           cd openwrt
           
           # Configure aria2c for faster downloads
           cat >> .config << EOF
           CONFIG_DOWNLOAD_TOOL_CUSTOM="aria2c"
-          CONFIG_ARIA2C_OPTS="-x 16 -s 16 -k 1M -j 16 --max-overall-download-limit=0"
+          CONFIG_ARIA2C_OPTS="-x ${ARIA2C_CONNECTIONS} -s ${ARIA2C_SEGMENTS} -k ${ARIA2C_MIN_SPLIT_SIZE} -j ${ARIA2C_MAX_CONCURRENT} --max-overall-download-limit=0"
           EOF
           
           make defconfig
           
-          # Use maximum parallelism for downloads
+          # Use maximum parallelism for downloads with progressive retry
           echo "Starting parallel downloads with $(nproc) jobs..."
-          make download -j$(nproc) V=s || make download -j$(nproc) || make download -j1 V=s
+          make download -j$(nproc) V=s || \
+          (echo "Retry with half parallelism..." && make download -j$(($(nproc)/2 > 0 ? $(nproc)/2 : 1)) V=s) || \
+          (echo "Final retry with single job..." && make download -j1 V=s)
           
           # Clean up failed downloads
           find dl -size -1024c -exec ls -l {} \;
