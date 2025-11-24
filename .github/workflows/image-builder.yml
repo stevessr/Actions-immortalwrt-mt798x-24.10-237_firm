@@ -572,6 +572,10 @@ jobs:
           cd openwrt
           echo "Generating package index..."
           make package/index V=s || true
+          
+          echo "Installing packages..."
+          make package/install V=s || true
+          
           echo "Building final image..."
           make -j$(nproc) target/install || make -j1 target/install V=s
           make -j$(nproc) checksum || true
