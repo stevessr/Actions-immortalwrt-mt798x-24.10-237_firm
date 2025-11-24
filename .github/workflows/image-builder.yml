@@ -443,10 +443,12 @@ jobs:
           GROUP_NUM=${{ matrix.package_group }}
           
           # Get list of all packages by scanning package directories
+          # Exclude opkg as it will be built in the finalize stage
           PACKAGES=$(find package/ feeds/*/package/ -maxdepth 2 -name Makefile 2>/dev/null | \
                      grep -v '/Makefile$' | \
                      sed 's|/Makefile||' | \
                      xargs -I{} basename {} | \
+                     grep -v '^opkg$' | \
                      sort -u)
           TOTAL_PACKAGES=$(echo "$PACKAGES" | wc -l)
           PACKAGES_PER_GROUP=$(( ($TOTAL_PACKAGES + $TOTAL_GROUPS - 1) / $TOTAL_GROUPS ))
@@ -459,17 +461,28 @@ jobs:
           GROUP_PACKAGES=$(echo "$PACKAGES" | sed -n "${START},${END}p")
           
           echo "Building packages from $START to $END (group $GROUP_NUM of $TOTAL_GROUPS)"
-          echo "Total packages in this group: $(echo "$GROUP_PACKAGES" | wc -l)"
+          echo "Total packages: $TOTAL_PACKAGES (excluding opkg)"
+          echo "Packages in this group: $(echo "$GROUP_PACKAGES" | wc -l)"
+          echo "Package list:"
+          echo "$GROUP_PACKAGES"
           
           # Track failed packages
           FAILED_PACKAGES=""
           
           # Compile packages in this group
           for pkg in $GROUP_PACKAGES; do
-            echo "Compiling package: $pkg"
-            if ! make -j$(nproc) package/$pkg/compile || ! make -j1 package/$pkg/compile V=s; then
-              echo "WARNING: Failed to compile package: $pkg"
+            # Skip empty lines
+            [ -z "$pkg" ] && continue
+            
+            echo "Building package: $pkg"
+            if make -j$(nproc) package/$pkg/compile V=s 2>&1 | tee /tmp/build_${pkg}.log; then
+              echo "✓ Successfully built: $pkg"
+            else
+              echo "✗ Failed to build: $pkg"
               FAILED_PACKAGES="$FAILED_PACKAGES $pkg"
+              # Show last 50 lines of build log for failed package
+              echo "Last 50 lines of build log:"
+              tail -50 /tmp/build_${pkg}.log || true
             fi
           done
           
