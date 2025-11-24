@@ -326,8 +326,8 @@ jobs:
           echo -e "$(nproc) thread compile - Building toolchain and system"
           echo "ccache status before build:"
           ccache -s || echo "ccache not available"
-          make -j$(nproc) tools/compile || make -j1 tools/compile V=s
-          make -j$(nproc) toolchain/compile || make -j1 toolchain/compile V=s
+          make -j$(nproc) tools/install || make -j1 tools/install V=s
+          make -j$(nproc) toolchain/install || make -j1 toolchain/install V=s
           make -j$(nproc) target/compile || make -j1 target/compile V=s
           echo "ccache status after build:"
           ccache -s || echo "ccache not available"
