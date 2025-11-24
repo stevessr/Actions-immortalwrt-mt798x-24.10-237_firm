@@ -328,22 +328,9 @@ jobs:
           ccache -s || echo "ccache not available"
           make -j$(nproc) tools/install || make -j1 tools/install V=s
           make -j$(nproc) toolchain/install || make -j1 toolchain/install V=s
-          # Build opkg host package which is needed for target/install
-          echo "Building opkg host package..."
-          make -j$(nproc) package/opkg/host/compile || make -j1 package/opkg/host/compile V=s
-          make -j$(nproc) package/opkg/host/install || make -j1 package/opkg/host/install V=s
           make -j$(nproc) target/compile || make -j1 target/compile V=s
           echo "ccache status after build:"
           ccache -s || echo "ccache not available"
-          # Verify tools were installed
-          echo "Verifying installed tools..."
-          if [ ! -f staging_dir/host/bin/opkg ]; then
-            echo "ERROR: opkg was not installed!"
-            echo "Contents of staging_dir/host/bin/:"
-            ls -la staging_dir/host/bin/ 2>/dev/null | head -20 || echo "Directory doesn't exist"
-            exit 1
-          fi
-          echo "Tools verified successfully - opkg is available"
 
       - name: Create toolchain archive
         run: |
@@ -441,14 +428,7 @@ jobs:
         run: |
           tar -xzf toolchain-build.tar.gz
           rm toolchain-build.tar.gz
-          # Verify critical tools are present
-          if [ ! -f staging_dir/host/bin/opkg ]; then
-            echo "ERROR: opkg not found in staging_dir/host/bin/"
-            echo "Listing staging_dir/host/bin/ contents:"
-            ls -la staging_dir/host/bin/ || echo "Directory doesn't exist"
-            exit 1
-          fi
-          echo "Toolchain extracted successfully, opkg found"
+          echo "Toolchain extracted successfully"
 
       - name: Compile packages (group ${{ matrix.package_group }})
         id: compile-packages
@@ -566,14 +546,7 @@ jobs:
         run: |
           tar -xzf toolchain-build.tar.gz
           rm toolchain-build.tar.gz
-          # Verify critical tools are present
-          if [ ! -f staging_dir/host/bin/opkg ]; then
-            echo "ERROR: opkg not found in staging_dir/host/bin/"
-            echo "Listing staging_dir/host/bin/ contents:"
-            ls -la staging_dir/host/bin/ || echo "Directory doesn't exist"
-            exit 1
-          fi
-          echo "Toolchain extracted successfully, opkg found"
+          echo "Toolchain extracted successfully"
 
       - name: Download all package builds
         uses: actions/download-artifact@main
@@ -599,6 +572,9 @@ jobs:
         id: finalize
         run: |
           cd openwrt
+          echo "Compiling opkg package (needed for target/install)..."
+          make -j$(nproc) package/opkg/compile || make -j1 package/opkg/compile V=s
+          
           echo "Generating package index..."
           make package/index V=s || true
           
