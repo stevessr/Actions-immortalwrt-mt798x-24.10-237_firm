@@ -408,8 +408,12 @@ jobs:
           TOTAL_GROUPS=3
           GROUP_NUM=${{ matrix.package_group }}
           
-          # Get list of all packages
-          PACKAGES=$(make package/index V=s 2>&1 | grep "^package/" | cut -d'/' -f2 | sort -u)
+          # Get list of all packages by scanning package directories
+          PACKAGES=$(find package/ feeds/*/package/ -maxdepth 2 -name Makefile 2>/dev/null | \
+                     grep -v '/Makefile$' | \
+                     sed 's|/Makefile||' | \
+                     xargs -I{} basename {} | \
+                     sort -u)
           TOTAL_PACKAGES=$(echo "$PACKAGES" | wc -l)
           PACKAGES_PER_GROUP=$(( ($TOTAL_PACKAGES + $TOTAL_GROUPS - 1) / $TOTAL_GROUPS ))
           
@@ -421,12 +425,28 @@ jobs:
           GROUP_PACKAGES=$(echo "$PACKAGES" | sed -n "${START},${END}p")
           
           echo "Building packages from $START to $END (group $GROUP_NUM of $TOTAL_GROUPS)"
+          echo "Total packages in this group: $(echo "$GROUP_PACKAGES" | wc -l)"
+          
+          # Track failed packages
+          FAILED_PACKAGES=""
           
           # Compile packages in this group
           for pkg in $GROUP_PACKAGES; do
             echo "Compiling package: $pkg"
-            make -j$(nproc) package/$pkg/compile || make -j1 package/$pkg/compile V=s || true
+            if ! make -j$(nproc) package/$pkg/compile || ! make -j1 package/$pkg/compile V=s; then
+              echo "WARNING: Failed to compile package: $pkg"
+              FAILED_PACKAGES="$FAILED_PACKAGES $pkg"
+            fi
           done
+          
+          # Report failed packages
+          if [ -n "$FAILED_PACKAGES" ]; then
+            echo "========================================="
+            echo "Failed packages in group $GROUP_NUM:"
+            echo "$FAILED_PACKAGES"
+            echo "========================================="
+            echo "failed_packages=$FAILED_PACKAGES" >> $GITHUB_OUTPUT
+          fi
           
           echo "ccache status after build:"
           ccache -s || echo "ccache not available"
@@ -510,17 +530,7 @@ jobs:
             rsync -a /workdir/openwrt/bin/packages-group-*/ /workdir/openwrt/bin/ || true
           fi
 
-      - name: Generate package index and final image
-        id: finalize
-        run: |
-          cd openwrt
-          echo "Generating package index..."
-          make package/index V=s || true
-          echo "Building final image..."
-          make -j$(nproc) target/install || make -j1 target/install V=s
-          make -j$(nproc) checksum || true
-
-      - name: Generate package index and final image
+      - name: Generate package index and build final image
         id: finalize
         run: |
           cd openwrt
