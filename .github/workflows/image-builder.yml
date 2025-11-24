@@ -336,7 +336,7 @@ jobs:
           if [ ! -f staging_dir/host/bin/opkg ]; then
             echo "ERROR: opkg was not installed!"
             echo "Contents of staging_dir/host/bin/:"
-            ls -la staging_dir/host/bin/ | head -20
+            ls -la staging_dir/host/bin/ 2>/dev/null | head -20 || echo "Directory doesn't exist"
             exit 1
           fi
           echo "Tools verified successfully"
