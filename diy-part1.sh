@@ -18,28 +18,18 @@
 #echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall' >>feeds.conf.default
 
 #添加编译日期标识
-date_version=$(date +"%Y年%m月%d日")
+date_version=$(date +"%Y-%m-%d")
 #sed -i "s/(\(luciversion || ''\))/(\1) + (' \/ $WRT_MARK-$WRT_DATE')/g" $(find ./feeds/luci/modules/luci-mod-status/ -type f -name "10_system.js")
 #sed -i "s/(\(luciversion || ''\))/(\1) + (' \/ by vx:Mr___zjz-$WRT_DATE')/g" $(find ./feeds/luci/modules/luci-mod-status/ -type f -name "10_system.js")
 #添加编译日期
-COMPILE_DATE=$(date +"%Y年%m月%d日")
-
-#sed -i "s/%C/   编译日期： ${COMPILE_DATE}  by 微信:Mr___zjz/g" package/base-files/files/usr/lib/os-release  
-#sed -i "s/%C/   编译日期： ${COMPILE_DATE}  by 微信:Mr___zjz/g" package/base-files/files/etc/openwrt_release
-
-#sed -i "s/%R/   编译日期： ${COMPILE_DATE}  by 微信:Mr___zjz/g" package/base-files/files/usr/lib/os-release  
-#sed -i "s/%R/   编译日期： ${COMPILE_DATE}  by 微信:Mr___zjz/g" package/base-files/files/etc/openwrt_release
-
-
-
-
+COMPILE_DATE=$(date +"%Y-%m-%d")
 
 # 修改版本为编译日期，数字类型。
-date_version=$(date +"%Y年%m月%d日")
+date_version=$(date +"%Y-%m-%d-")
 echo $date_version > version
 
 # 为iStoreOS固件版本加上编译作者
-author="微信:Mr___zjz"
+author="author"
 sed -i "s/DISTRIB_DESCRIPTION.*/DISTRIB_DESCRIPTION='%D %V ${date_version} by ${author}'/g" package/base-files/files/etc/openwrt_release
 sed -i "s/OPENWRT_RELEASE.*/OPENWRT_RELEASE=\"%D %V ${date_version} by ${author}\"/g" package/base-files/files/usr/lib/os-release
 
@@ -47,7 +37,7 @@ sed -i "s/%D/ openwrt/g" package/base-files/files/usr/lib/os-release
 sed -i "s/%D/ openwrt/g" package/base-files/files/etc/openwrt_release
 
 sed -i "s/%V/ 24.10.4 /g" package/base-files/files/usr/lib/os-release
-sed -i "s/%V/ 24.10.4    编译日期： ${COMPILE_DATE}  by 微信:Mr___zjz//g" package/base-files/files/etc/openwrt_release
+sed -i "s/%V/ 24.10.4 compliled at ${COMPILE_DATE}  by ${author}//g" package/base-files/files/etc/openwrt_release
 
 # Add the default password for the 'root' user（Change the empty password to 'password'）
 sed -i 's/root:::0:99999:7:::/root:$1$V4UetPzk$CYXluq4wUazHjmCDBCqXF.::0:99999:7:::/g' package/base-files/files/etc/shadow
@@ -66,8 +56,7 @@ orig_version=$(cat "package/emortal/default-settings/files/99-default-settings-c
 VERSION=$(grep "PRETTY_NAME=" package/base-files/files/usr/lib/os-release | cut -d'=' -f2)
 #sed -i "s/openwrt 24.10.3 /R${date_version} by vx:Mr___zjz  /g" package/emortal/default-settings/files/99-default-settings-chinese
 
-#sed -i '/^exit 0$/i sed -i "s,OPENWRT_RELEASE=.*, ${VERSION} 编译日期：${date_version}  by 微信:Mr___zjz  ,g" package/base-files/files/usr/lib/os-release' package/emortal/default-settings/files/99-default-settings-chinese
-sed -i '/^exit 0$/i sed -i "s,OPENWRT_RELEASE=.*,'"${VERSION}"' 编译日期：'"${date_version}"'  by 微信:Mr___zjz  ,g" package/base-files/files/usr/lib/os-release' \package/emortal/default-settings/files/99-default-settings-chinese
+sed -i '/^exit 0$/i sed -i "s,OPENWRT_RELEASE=.*,'"${VERSION}"' copiled at'"${date_version}"'  by 微信:Mr___zjz  ,g" package/base-files/files/usr/lib/os-release' \package/emortal/default-settings/files/99-default-settings-chinese
 CFG_FILE="./package/base-files/files/bin/config_generate"
 #修改默认IP地址
 #sed -i "s/192\.168\.[0-9]*\.[0-9]*/$WRT_IP/g" $CFG_FILE

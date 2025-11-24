@@ -34,7 +34,6 @@ rm -rf feeds/luci/themes/luci-theme-argon
 git clone https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon
 git clone https://github.com/jerrykuku/luci-app-argon-config.git package/luci-app-argon-config
 git clone https://github.com/sbwml/luci-app-mentohust package/luci-app-mentohust
-git clone https://github.com/OpenListTeam/OpenList-OpenWRT package/openlist
 # 下载 MentoHUST 插件源码
 git clone https://github.com/sbwml/luci-app-mentohust.git package/mentohust
 
