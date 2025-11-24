@@ -136,7 +136,7 @@ jobs:
       - name: Get repo hash
         id: get-hash
         run: echo "repo_hash=$(git -C openwrt rev-parse HEAD)" >> $GITHUB_OUTPUT
-          
+
       - name: Setup ccache
         run: |
           echo "USE_CCACHE=1" >> $GITHUB_ENV
