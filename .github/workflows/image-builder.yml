@@ -328,6 +328,10 @@ jobs:
           ccache -s || echo "ccache not available"
           make -j$(nproc) tools/install || make -j1 tools/install V=s
           make -j$(nproc) toolchain/install || make -j1 toolchain/install V=s
+          # Build opkg host package which is needed for target/install
+          echo "Building opkg host package..."
+          make -j$(nproc) package/opkg/host/compile || make -j1 package/opkg/host/compile V=s
+          make -j$(nproc) package/opkg/host/install || make -j1 package/opkg/host/install V=s
           make -j$(nproc) target/compile || make -j1 target/compile V=s
           echo "ccache status after build:"
           ccache -s || echo "ccache not available"
@@ -339,7 +343,7 @@ jobs:
             ls -la staging_dir/host/bin/ 2>/dev/null | head -20 || echo "Directory doesn't exist"
             exit 1
           fi
-          echo "Tools verified successfully"
+          echo "Tools verified successfully - opkg is available"
 
       - name: Create toolchain archive
         run: |
