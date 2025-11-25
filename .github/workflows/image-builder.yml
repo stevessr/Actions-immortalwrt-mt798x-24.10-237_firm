@@ -266,11 +266,15 @@ jobs:
           echo "ccache status before build:"
           ccache -s || echo "ccache not available"
           
+          # Build opkg first as it's critical for target installation
+          echo "Building opkg package first (critical for target installation)..."
+          make -j$(nproc) package/opkg/compile V=s || make -j1 package/opkg/compile V=s
+          
           # Track failed packages
           FAILED_PACKAGES=""
           
           # Get list of all packages by scanning package directories
-          # Exclude opkg as it will be built in the finalize stage
+          # Exclude opkg as it was built separately above
           PACKAGES=$(find package/ feeds/*/package/ -maxdepth 2 -name Makefile 2>/dev/null | \
                      grep -v '/Makefile$' | \
                      sed 's|/Makefile||' | \
@@ -279,7 +283,7 @@ jobs:
                      sort -u)
           
           TOTAL_PACKAGES=$(echo "$PACKAGES" | wc -l)
-          echo "Total packages to build: $TOTAL_PACKAGES (excluding opkg)"
+          echo "Total packages to build: $TOTAL_PACKAGES (excluding opkg which was built separately)"
           echo "Package list:"
           echo "$PACKAGES"
           
@@ -316,9 +320,6 @@ jobs:
         id: finalize
         run: |
           cd openwrt
-          echo "Compiling opkg package (needed for target/install)..."
-          make -j$(nproc) package/opkg/compile || make -j1 package/opkg/compile V=s
-          
           echo "Generating package index..."
           make package/index V=s || true
           
