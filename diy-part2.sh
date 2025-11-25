@@ -19,6 +19,18 @@
 # Modify hostname
 #sed -i 's/OpenWrt/P3TERX-Router/g' package/base-files/files/bin/config_generate
 # Git稀疏克隆，只克隆指定目录到本地
+sed -i 's/192.168.1.1/192.168.10.1/g' package/base-files/files/bin/config_generate
+
+# 在 git clone 前先删除已存在的目录，防止冲突
+rm -rf package/luci-theme-argon
+rm -rf package/luci-app-argon-config
+rm -rf package/luci-app-mentohust
+rm -rf package/openlist
+rm -rf package/mentohust
+rm -rf package/passwall-packages
+rm -rf package/passwall-luci
+rm -rf package/mosdns
+rm -rf package/luci-app-easytier
 
 function git_sparse_clone() {
   branch="$1" repourl="$2" && shift 2
@@ -67,7 +79,7 @@ git_sparse_clone main https://github.com/linkease/istore-ui app-store-ui
 git_sparse_clone main https://github.com/linkease/istore luci
 
 # easytier
-git clone -b optional-easytier-web --single-branch https://github.com/icyray/luci-app-easytier package/luci-app-easytier
+git clone -b main --single-branch https://github.com/icyray/luci-app-easytier package/luci-app-easytier
 sed -i 's/util.pcdata/xml.pcdata/g' package/luci-app-easytier/luci-app-easytier/luasrc/model/cbi/easytier.lua
 
 # defconfig
