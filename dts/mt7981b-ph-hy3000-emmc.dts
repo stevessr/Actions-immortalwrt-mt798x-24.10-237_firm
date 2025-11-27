@@ -144,7 +144,6 @@
 		};
 	};
 };
-
 &mmc0 {
 	bus-width = <8>;
 	cap-mmc-highspeed;
@@ -165,9 +164,27 @@
 		block {
 			compatible = "block-device";
 
+			// 设置为 64 位寻址，因为分区大小和偏移量超过 4GB
 			partitions {
-				block-partition-factory {
-					partname = "factory";
+				#address-cells = <2>;
+				#size-cells = <2>;
+
+				// 1. p1: gpt (0x0 to 0x4745)
+				partition@1 {
+					label = "gpt";
+					reg = <0x0 0x0 0x0 0x4745>;
+				};
+
+				// 2. p2: u-boot-env (0x431aa0 to 0x4b8106)
+				partition@2 {
+					label = "u-boot-env";
+					reg = <0x0 0x431aa0 0x0 0x86666>;
+				};
+
+				// 3. p3: factory (0x4b8106 to 0x6d0e56) - 包含 nvmem-layout
+				block_partition_factory: partition@3 {
+					label = "factory";
+					reg = <0x0 0x4b8106 0x0 0x218d50>;
 
 					nvmem-layout {
 						compatible = "fixed-layout";
@@ -184,6 +201,59 @@
 							#nvmem-cell-cells = <1>;
 						};
 					};
+				};
+
+				// 4. p4: fip (0x6d0e56 to 0x8e9ba6)
+				partition@4 {
+					label = "fip";
+					reg = <0x0 0x6d0e56 0x0 0x218d50>;
+				};
+
+				// 5. p5: kernel (0x8e9ba6 to 0x2a80000)
+				partition@5 {
+					label = "kernel";
+					reg = <0x0 0x8e9ba6 0x0 0x219645a>;
+				};
+
+				// 6. p6: rootfs (OpenWrt /rom) - 关键 (0x2a80000 to 0x23700000)
+				partition@6 {
+					label = "rootfs";
+					reg = <0x0 0x2a80000 0x0 0x20c80000>;
+					compatible = "denx,uimage";
+				};
+
+				// 7. p7: recovery (0x23700000 to 0x24200000)
+				partition@7 {
+					label = "recovery";
+					reg = <0x0 0x23700000 0x0 0xb00000>;
+				};
+
+				// 8. p8: rootfs_data (OpenWrt /overlay) - 最关键! (0x24200000 to 0x130900000)
+				partition@8 {
+					label = "rootfs_data";
+					// 0x0 0x24200000 (Start Hi/Lo) | 0x1 0xc700000 (Size Hi/Lo)
+					reg = <0x0 0x24200000 0x1 0xc700000>;
+				};
+
+				// 9. p9: data1 (0x130900000 to 0x1e7800000)
+				partition@9 {
+					label = "data1";
+					// 0x1 0x30900000 (Start Hi/Lo) | 0x1c 0xd6f00000 (Size Hi/Lo)
+					reg = <0x1 0x30900000 0x1c 0xd6f00000>;
+				};
+
+				// 10. p10: data2 (0x1e7800000 to 0x1e8280000)
+				partition@10 {
+					label = "data2";
+					// 0x1e 0x7800000 (Start Hi/Lo) | 0x0 0xa80000 (Size Hi/Lo)
+					reg = <0x1e 0x7800000 0x0 0xa80000>;
+				};
+
+				// 11. p11: swap (0x1e8280000 to 0x1e8280000 + 0x80f00000)
+				partition@11 {
+					label = "swap";
+					// 0x1e 0x8280000 (Start Hi/Lo) | 0x0 0x80f00000 (Size Hi/Lo)
+					reg = <0x1e 0x8280000 0x0 0x80f00000>;
 				};
 			};
 		};
